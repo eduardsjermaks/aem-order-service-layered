@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr, Field
 
 from app.domain.order import Order
@@ -42,6 +42,16 @@ def serialize_order(order: Order) -> dict[str, Any]:
     }
 
 
+def get_order_or_404(repository: OrderRepository, order_id: int) -> Order:
+    try:
+        return repository.get(order_id)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Order with id {order_id} not found",
+        ) from exc
+
+
 @app.get("/health")
 def health_check() -> dict[str, str]:
     return {"status": "ok"}
@@ -57,40 +67,38 @@ def create_order(payload: OrderCreateRequest) -> Any:
         amount=payload.amount,
         status=payload.status,
     )
+    order.touch()
     created = repository.create(order)
     return serialize_order(created)
 
 
 @app.get("/orders", response_model=list[OrderResponse])
-def list_orders() -> Any:
+def list_orders(status: str | None = Query(default=None)) -> Any:
     repository: OrderRepository = app.state.order_repository
-    return [serialize_order(order) for order in repository.list()]
+    orders = repository.list()
+    if status is not None:
+        normalized = status.strip().lower()
+        orders = [order for order in orders if order.status.lower() == normalized]
+    return [serialize_order(order) for order in orders]
 
 
 @app.get("/orders/{order_id}", response_model=OrderResponse)
 def get_order(order_id: int) -> Any:
     repository: OrderRepository = app.state.order_repository
-    try:
-        order = repository.get(order_id)
-    except KeyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Order with id {order_id} not found",
-        ) from exc
-
+    order = get_order_or_404(repository, order_id)
     return serialize_order(order)
 
 
 @app.put("/orders/{order_id}", response_model=OrderResponse)
 def update_order(order_id: int, payload: OrderUpdateRequest) -> Any:
     repository: OrderRepository = app.state.order_repository
-    try:
-        order = repository.get(order_id)
-    except KeyError as exc:
+    order = get_order_or_404(repository, order_id)
+
+    if order.is_confirmed and payload.customer_email != order.customer_email:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Order with id {order_id} not found",
-        ) from exc
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="customer_email cannot be changed after an order is confirmed",
+        )
 
     updated = Order(
         id=order.id,
@@ -98,7 +106,9 @@ def update_order(order_id: int, payload: OrderUpdateRequest) -> Any:
         amount=payload.amount,
         status=payload.status,
         created_at=order.created_at,
+        updated_at=order.updated_at,
     )
+    updated.touch()
     repository.update(order_id, updated)
     return serialize_order(updated)
 
@@ -106,13 +116,13 @@ def update_order(order_id: int, payload: OrderUpdateRequest) -> Any:
 @app.post("/orders/{order_id}/cancel", response_model=OrderResponse)
 def cancel_order(order_id: int) -> Any:
     repository: OrderRepository = app.state.order_repository
-    try:
-        order = repository.get(order_id)
-    except KeyError as exc:
+    order = get_order_or_404(repository, order_id)
+
+    if not order.can_cancel:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Order with id {order_id} not found",
-        ) from exc
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order can only be cancelled from NEW or CONFIRMED status",
+        )
 
     cancelled = Order(
         id=order.id,
@@ -120,6 +130,8 @@ def cancel_order(order_id: int) -> Any:
         amount=order.amount,
         status="cancelled",
         created_at=order.created_at,
+        updated_at=order.updated_at,
     )
+    cancelled.touch()
     repository.update(order_id, cancelled)
     return serialize_order(cancelled)

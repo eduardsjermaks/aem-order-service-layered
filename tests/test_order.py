@@ -17,6 +17,21 @@ def test_order_valid_construction() -> None:
     assert order.amount == 49.99
     assert order.status == "pending"
     assert order.created_at is not None
+    assert order.updated_at is not None
+
+
+def test_order_touch_updates_updated_at() -> None:
+    order = Order(
+        id=1,
+        customer_email="customer@example.com",
+        amount=49.99,
+        status="pending",
+    )
+    original = order.updated_at
+
+    order.touch()
+
+    assert order.updated_at > original
 
 
 def test_order_rejects_invalid_email() -> None:

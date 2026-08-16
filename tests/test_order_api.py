@@ -166,3 +166,73 @@ def test_cancel_missing_order_returns_404() -> None:
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Order with id 999 not found"}
+
+
+def test_list_orders_filters_by_status() -> None:
+    client.post(
+        "/orders",
+        json={
+            "customer_email": "first@example.com",
+            "amount": 25.0,
+            "status": "pending",
+        },
+    )
+    client.post(
+        "/orders",
+        json={
+            "customer_email": "second@example.com",
+            "amount": 30.0,
+            "status": "paid",
+        },
+    )
+
+    response = client.get("/orders?status=paid")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["status"] == "paid"
+
+
+def test_cancel_order_rejects_invalid_status() -> None:
+    create_response = client.post(
+        "/orders",
+        json={
+            "customer_email": "customer@example.com",
+            "amount": 49.99,
+            "status": "paid",
+        },
+    )
+    order_id = create_response.json()["id"]
+
+    response = client.post(f"/orders/{order_id}/cancel")
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": "Order can only be cancelled from NEW or CONFIRMED status"
+    }
+
+
+def test_update_order_cannot_change_email_after_confirmation() -> None:
+    create_response = client.post(
+        "/orders",
+        json={
+            "customer_email": "customer@example.com",
+            "amount": 49.99,
+            "status": "confirmed",
+        },
+    )
+    order_id = create_response.json()["id"]
+
+    response = client.put(
+        f"/orders/{order_id}",
+        json={
+            "customer_email": "changed@example.com",
+            "amount": 49.99,
+            "status": "confirmed",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": "customer_email cannot be changed after an order is confirmed"
+    }

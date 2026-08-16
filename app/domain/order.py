@@ -11,12 +11,26 @@ class Order(BaseModel):
     amount: float = Field(gt=0)
     status: str = Field(min_length=1)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @property
+    def is_confirmed(self) -> bool:
+        return self.status.lower() == "confirmed"
+
+    @property
+    def can_cancel(self) -> bool:
+        return self.status.lower() in {"new", "pending", "confirmed"}
 
     @field_validator("status")
     @classmethod
     def validate_status(cls, value: str) -> str:
         normalized = value.strip().lower()
-        allowed = {"pending", "paid", "shipped", "cancelled"}
+        allowed = {"new", "pending", "confirmed", "paid", "shipped", "cancelled"}
         if normalized not in allowed:
-            raise ValueError("status must be one of: pending, paid, shipped, cancelled")
+            raise ValueError(
+                "status must be one of: new, pending, confirmed, paid, shipped, cancelled"
+            )
         return normalized
+
+    def touch(self) -> None:
+        self.updated_at = datetime.now(timezone.utc)
