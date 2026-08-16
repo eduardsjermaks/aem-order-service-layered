@@ -1,0 +1,73 @@
+from datetime import datetime
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import app
+from app.repository import OrderRepository
+
+client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def reset_repository() -> None:
+    app.state.order_repository = OrderRepository()
+
+
+def test_create_order_returns_201_and_order_payload() -> None:
+    response = client.post(
+        "/orders",
+        json={
+            "customer_email": "customer@example.com",
+            "amount": 49.99,
+            "status": "pending",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload == {
+        "id": 1,
+        "customer_email": "customer@example.com",
+        "amount": 49.99,
+        "status": "pending",
+        "created_at": payload["created_at"],
+    }
+    datetime.fromisoformat(payload["created_at"].replace("Z", "+00:00"))
+
+
+def test_get_order_returns_saved_order() -> None:
+    create_response = client.post(
+        "/orders",
+        json={
+            "customer_email": "customer@example.com",
+            "amount": 49.99,
+            "status": "pending",
+        },
+    )
+
+    response = client.get(f"/orders/{create_response.json()['id']}")
+
+    assert response.status_code == 200
+    assert response.json() == create_response.json()
+
+
+def test_get_missing_order_returns_404() -> None:
+    response = client.get("/orders/999")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Order with id 999 not found"}
+
+
+def test_create_order_rejects_invalid_email() -> None:
+    response = client.post(
+        "/orders",
+        json={
+            "customer_email": "not-an-email",
+            "amount": 49.99,
+            "status": "pending",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "customer_email"]
