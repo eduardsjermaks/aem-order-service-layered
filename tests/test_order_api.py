@@ -71,3 +71,98 @@ def test_create_order_rejects_invalid_email() -> None:
 
     assert response.status_code == 422
     assert response.json()["detail"][0]["loc"] == ["body", "customer_email"]
+
+
+def test_list_orders_returns_all_orders() -> None:
+    client.post(
+        "/orders",
+        json={
+            "customer_email": "first@example.com",
+            "amount": 25.0,
+            "status": "pending",
+        },
+    )
+    client.post(
+        "/orders",
+        json={
+            "customer_email": "second@example.com",
+            "amount": 75.5,
+            "status": "paid",
+        },
+    )
+
+    response = client.get("/orders")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+    assert response.json()[0]["customer_email"] == "first@example.com"
+    assert response.json()[1]["customer_email"] == "second@example.com"
+
+
+def test_update_order_returns_updated_order() -> None:
+    create_response = client.post(
+        "/orders",
+        json={
+            "customer_email": "customer@example.com",
+            "amount": 49.99,
+            "status": "pending",
+        },
+    )
+    order_id = create_response.json()["id"]
+
+    response = client.put(
+        f"/orders/{order_id}",
+        json={
+            "customer_email": "updated@example.com",
+            "amount": 99.99,
+            "status": "paid",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": order_id,
+        "customer_email": "updated@example.com",
+        "amount": 99.99,
+        "status": "paid",
+        "created_at": response.json()["created_at"],
+    }
+
+
+def test_update_missing_order_returns_404() -> None:
+    response = client.put(
+        "/orders/999",
+        json={
+            "customer_email": "customer@example.com",
+            "amount": 99.99,
+            "status": "paid",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Order with id 999 not found"}
+
+
+def test_cancel_order_returns_cancelled_status() -> None:
+    create_response = client.post(
+        "/orders",
+        json={
+            "customer_email": "customer@example.com",
+            "amount": 49.99,
+            "status": "pending",
+        },
+    )
+    order_id = create_response.json()["id"]
+
+    response = client.post(f"/orders/{order_id}/cancel")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+    assert response.json()["id"] == order_id
+
+
+def test_cancel_missing_order_returns_404() -> None:
+    response = client.post("/orders/999/cancel")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Order with id 999 not found"}
