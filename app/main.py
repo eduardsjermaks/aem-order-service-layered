@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr, Field
 
-from app.domain.order import Order
+from app.domain.order import CancellationNotAllowedError, Order
 from app.repository import OrderRepository
 
 app = FastAPI(title="AEM Order Service")
@@ -121,20 +121,14 @@ def cancel_order(order_id: int) -> Any:
     repository: OrderRepository = app.state.order_repository
     order = get_order_or_404(repository, order_id)
 
-    if not order.can_cancel:
+    try:
+        order.cancel()
+    except CancellationNotAllowedError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Order can only be cancelled from NEW or CONFIRMED status",
-        )
+            detail="Order can only be cancelled from NEW, PENDING, or CONFIRMED status",
+        ) from exc
 
-    cancelled = Order(
-        id=order.id,
-        customer_email=order.customer_email,
-        amount=order.amount,
-        status="cancelled",
-        created_at=order.created_at,
-        updated_at=order.updated_at,
-    )
-    cancelled.touch()
-    repository.update(order_id, cancelled)
-    return order_to_response(cancelled)
+    order.touch()
+    repository.update(order_id, order)
+    return order_to_response(order)

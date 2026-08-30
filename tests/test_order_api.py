@@ -208,7 +208,7 @@ def test_cancel_order_rejects_invalid_status() -> None:
 
     assert response.status_code == 400
     assert response.json() == {
-        "detail": "Order can only be cancelled from NEW or CONFIRMED status"
+        "detail": "Order can only be cancelled from NEW, PENDING, or CONFIRMED status"
     }
 
 

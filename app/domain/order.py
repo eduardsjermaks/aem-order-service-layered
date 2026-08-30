@@ -5,6 +5,10 @@ from datetime import datetime, timezone
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
+class CancellationNotAllowedError(Exception):
+    pass
+
+
 class Order(BaseModel):
     id: int = Field(gt=0)
     customer_email: EmailStr
@@ -38,6 +42,11 @@ class Order(BaseModel):
             raise ValueError(
                 "customer_email cannot be changed after an order is confirmed"
             )
+
+    def cancel(self) -> None:
+        if not self.can_cancel:
+            raise CancellationNotAllowedError
+        self.status = "cancelled"
 
     def touch(self) -> None:
         self.updated_at = datetime.now(timezone.utc)
