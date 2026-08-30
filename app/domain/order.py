@@ -19,11 +19,11 @@ class Order(BaseModel):
 
     @property
     def is_confirmed(self) -> bool:
-        return self.status.lower() == "confirmed"
+        return self.status == "confirmed"
 
     @property
     def can_cancel(self) -> bool:
-        return self.status.lower() in {"new", "pending", "confirmed"}
+        return self.status in {"new", "pending", "confirmed"}
 
     @field_validator("status")
     @classmethod
