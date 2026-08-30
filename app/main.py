@@ -42,6 +42,17 @@ def get_order_or_404(repository: OrderRepository, order_id: int) -> Order:
         ) from exc
 
 
+def order_to_response(order: Order) -> OrderResponse:
+    """Convert an Order domain object to an OrderResponse."""
+    return OrderResponse(
+        id=order.id,
+        customer_email=order.customer_email,
+        amount=order.amount,
+        status=order.status,
+        created_at=order.created_at.isoformat(),
+    )
+
+
 @app.get("/health")
 def health_check() -> dict[str, str]:
     return {"status": "ok"}
@@ -59,13 +70,7 @@ def create_order(payload: OrderCreateRequest) -> Any:
     )
     order.touch()
     created = repository.create(order)
-    return OrderResponse(
-        id=created.id,
-        customer_email=created.customer_email,
-        amount=created.amount,
-        status=created.status,
-        created_at=created.created_at.isoformat(),
-    )
+    return order_to_response(created)
 
 
 @app.get("/orders", response_model=list[OrderResponse])
@@ -75,29 +80,14 @@ def list_orders(status: str | None = Query(default=None)) -> Any:
     if status is not None:
         normalized = status.strip().lower()
         orders = [order for order in orders if order.status.lower() == normalized]
-    return [
-        OrderResponse(
-            id=order.id,
-            customer_email=order.customer_email,
-            amount=order.amount,
-            status=order.status,
-            created_at=order.created_at.isoformat(),
-        )
-        for order in orders
-    ]
+    return [order_to_response(order) for order in orders]
 
 
 @app.get("/orders/{order_id}", response_model=OrderResponse)
 def get_order(order_id: int) -> Any:
     repository: OrderRepository = app.state.order_repository
     order = get_order_or_404(repository, order_id)
-    return OrderResponse(
-        id=order.id,
-        customer_email=order.customer_email,
-        amount=order.amount,
-        status=order.status,
-        created_at=order.created_at.isoformat(),
-    )
+    return order_to_response(order)
 
 
 @app.put("/orders/{order_id}", response_model=OrderResponse)
@@ -123,13 +113,7 @@ def update_order(order_id: int, payload: OrderUpdateRequest) -> Any:
     )
     updated.touch()
     repository.update(order_id, updated)
-    return OrderResponse(
-        id=updated.id,
-        customer_email=updated.customer_email,
-        amount=updated.amount,
-        status=updated.status,
-        created_at=updated.created_at.isoformat(),
-    )
+    return order_to_response(updated)
 
 
 @app.post("/orders/{order_id}/cancel", response_model=OrderResponse)
@@ -153,10 +137,4 @@ def cancel_order(order_id: int) -> Any:
     )
     cancelled.touch()
     repository.update(order_id, cancelled)
-    return OrderResponse(
-        id=cancelled.id,
-        customer_email=cancelled.customer_email,
-        amount=cancelled.amount,
-        status=cancelled.status,
-        created_at=cancelled.created_at.isoformat(),
-    )
+    return order_to_response(cancelled)
