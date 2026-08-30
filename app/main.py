@@ -105,11 +105,13 @@ def update_order(order_id: int, payload: OrderUpdateRequest) -> Any:
     repository: OrderRepository = app.state.order_repository
     order = get_order_or_404(repository, order_id)
 
-    if order.is_confirmed and payload.customer_email != order.customer_email:
+    try:
+        order.validate_email_change(payload.customer_email)
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="customer_email cannot be changed after an order is confirmed",
-        )
+            detail=str(exc),
+        ) from exc
 
     updated = Order(
         id=order.id,

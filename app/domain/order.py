@@ -32,5 +32,12 @@ class Order(BaseModel):
             )
         return normalized
 
+    def validate_email_change(self, new_email: str) -> None:
+        """Validate that email can be changed. Raises ValueError if change is not allowed."""
+        if self.is_confirmed and new_email != self.customer_email:
+            raise ValueError(
+                "customer_email cannot be changed after an order is confirmed"
+            )
+
     def touch(self) -> None:
         self.updated_at = datetime.now(timezone.utc)
