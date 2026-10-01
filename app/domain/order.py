@@ -9,6 +9,17 @@ class CancellationNotAllowedError(Exception):
     pass
 
 
+ALLOWED_STATUSES = (
+    "new",
+    "pending",
+    "confirmed",
+    "paid",
+    "shipped",
+    "cancelled",
+    "refunded",
+)
+
+
 class Order(BaseModel):
     id: int = Field(gt=0)
     customer_email: EmailStr
@@ -29,11 +40,8 @@ class Order(BaseModel):
     @classmethod
     def validate_status(cls, value: str) -> str:
         normalized = value.strip().lower()
-        allowed = {"new", "pending", "confirmed", "paid", "shipped", "cancelled"}
-        if normalized not in allowed:
-            raise ValueError(
-                "status must be one of: new, pending, confirmed, paid, shipped, cancelled"
-            )
+        if normalized not in ALLOWED_STATUSES:
+            raise ValueError("status must be one of: " + ", ".join(ALLOWED_STATUSES))
         return normalized
 
     def validate_email_change(self, new_email: str) -> None:
